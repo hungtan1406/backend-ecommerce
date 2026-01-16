@@ -1,26 +1,89 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
-
+import {
+  Injectable,
+  UnauthorizedException,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
+import { UsersService } from '../users/users.service';
+import { RegisterDto } from './dto/register.dto';
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  async login(email: string, password: string) {
+    console.log('LOGIN EMAIL:', email);
+
+    const user = await this.usersService.findByEmail(email);
+    console.log('USER:', user);
+
+    if (!user) {
+      throw new UnauthorizedException('Email không tồn tại');
+    }
+
+    console.log('HASH:', user.password);
+
+    const isValid = await bcrypt.compare(password, user.password);
+    console.log('PASSWORD VALID:', isValid);
+
+    const payload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET is missing');
+    }
+
+    if (!process.env.JWT_REFRESH_SECRET) {
+      throw new Error('JWT_REFRESH_SECRET is missing');
+    }
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: Number(process.env.JWT_EXPIRES_IN),
+    });
+
+    const refreshToken = this.jwtService.sign(payload, {
+      secret: process.env.JWT_REFRESH_SECRET,
+      expiresIn: Number(process.env.JWT_REFRESH_EXPIRES_IN),
+    });
+
+    return {
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      },
+      accessToken,
+      refreshToken,
+    };
   }
 
-  findAll() {
-    return `This action returns all auth`;
-  }
+  async register(dto: RegisterDto) {
+    const exists = await this.usersService.findByEmail(dto.email);
+    if (exists) {
+      throw new ConflictException('Email đã tồn tại');
+    }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
-  }
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
-  }
+    const user = await this.usersService.create({
+      fullName: dto.fullName,
+      email: dto.email,
+      password: hashedPassword,
+      role: 'user',
+      isActive: true,
+    });
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
+    return {
+      id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+    };
   }
 }
