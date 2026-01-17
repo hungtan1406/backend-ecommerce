@@ -10,38 +10,35 @@ export class UsersService {
     private readonly userModel: Model<UserDocument>,
   ) {}
 
-  // ✅ dùng cho Auth & Seeder
-  async findByEmail(email: string): Promise<UserDocument | null> {
+  // dùng cho auth
+  async findByEmail(email: string) {
     return this.userModel.findOne({ email }).exec();
   }
 
-  // ✅ admin: lấy danh sách user
-  async findAll(): Promise<UserDocument[]> {
-    return this.userModel
-      .find()
-      .select('-password') // 🔥 không trả password
-      .exec();
+  async findById(id: string) {
+    return this.userModel.findById(id).exec();
   }
 
-  // ✅ admin: xem chi tiết user
-  async findOne(id: string): Promise<UserDocument> {
+  async create(data: Partial<User>) {
+    const user = new this.userModel(data);
+    return user.save();
+  }
+
+  // 🔥 ADMIN
+  async findAll() {
+    return this.userModel.find().select('-password').exec();
+  }
+
+  async findOne(id: string) {
     const user = await this.userModel.findById(id).select('-password').exec();
 
     if (!user) {
       throw new NotFoundException('User không tồn tại');
     }
-
     return user;
   }
 
-  // ✅ dùng cho seed + register
-  async create(data: Partial<User>): Promise<UserDocument> {
-    const user = new this.userModel(data);
-    return user.save();
-  }
-
-  // ✅ admin: cập nhật user
-  async update(id: string, data: Partial<User>): Promise<UserDocument> {
+  async update(id: string, data: Partial<User>) {
     const user = await this.userModel
       .findByIdAndUpdate(id, data, { new: true })
       .select('-password')
@@ -50,18 +47,14 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User không tồn tại');
     }
-
     return user;
   }
 
-  // ✅ admin: xoá user
-  async remove(id: string): Promise<{ message: string }> {
-    const result = await this.userModel.findByIdAndDelete(id).exec();
-
+  async remove(id: string) {
+    const result = await this.userModel.findByIdAndDelete(id);
     if (!result) {
       throw new NotFoundException('User không tồn tại');
     }
-
     return { message: 'Xoá user thành công' };
   }
 }
